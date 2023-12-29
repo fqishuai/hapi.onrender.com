@@ -1,0 +1,20 @@
+{
+  "name": "hapi.onrender.com",
+  "version": "1.0.0",
+  "description": "hapi WEB API",
+  "main": "server.js",
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fqishuai/hapi.onrender.com.git"
+  },
+  "author": "fqishuai",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/fqishuai/hapi.onrender.com/issues"
+  },
+  "homepage": "https://github.com/fqishuai/hapi.onrender.com#readme",
+  "dependencies": {
+    "@hapi/hapi": "^21.3.2"
+  }
+}
