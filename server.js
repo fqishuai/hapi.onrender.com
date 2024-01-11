@@ -6,6 +6,9 @@ const Dotenv = require('dotenv');
 
 Dotenv.config();
 
+server.log('test DATABASE_URL', process.env.DATABASE_URL);
+server.log('test HOST', process.env.HOST);
+server.log('test PORT', process.env.PORT);
 
 // Simulate database for demo
 const users = [
