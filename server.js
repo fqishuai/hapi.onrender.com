@@ -2,14 +2,13 @@
 
 const Hapi = require('@hapi/hapi');
 const Bcrypt = require('bcrypt');
-const Iron = require('@hapi/iron');
+const Dotenv = require('dotenv');
 
-const internals = {};
+Dotenv.config();
 
 
 // Simulate database for demo
-
-internals.users = [
+const users = [
   {
     id: 1,
     name: 'john',
@@ -17,12 +16,7 @@ internals.users = [
   },
 ];
 
-Bcrypt.hash('secret', 10, function(err, hash) {
-  // Store hash in your password DB.
-  console.log('hash: ', hash)
-});
-
-internals.renderHtml = {
+const renderHtml = {
   login: (message) => {
     return `
     <html><head><title>Login page</title></head><body>
@@ -46,10 +40,8 @@ internals.renderHtml = {
   }
 };
 
-
-internals.server = async function () {
-
-  const server = Hapi.server({ port: 4000, host: 'localhost' });
+const init = async function () {
+  const server = Hapi.server({ host: process.env.HOST, port: process.env.PORT });
 
   await server.register(require('@hapi/cookie'));
 
@@ -67,14 +59,7 @@ internals.server = async function () {
     redirectTo: '/login',
 
     validate: async (request, session) => {
-      console.log('session cookie: ', session) // session cookie:  { id: 1 }
-      const unseal = await Iron.unseal(
-        'Fe26.2**6385f16d3746b5c3f7acc5d49cdd9eb4d04454e08b07fda211f98ed7d953c0ec*L_qxkbu3iUexV6P5I1vJvA*5JtC_MPPQq3WfN7m9YuYwA**41df5cdeaee532c96b89b35670c5653261766642803719879de272f417bc32e1*pSacjR7Fh6AZE8Ap8sEeEMYRB4Feci5AbdAVUhUk-RE',
-        'password-should-be-32-characters',
-        Iron.defaults
-      );
-      console.log('unseal: ', unseal) // unseal:  { id: 1 }
-      const account = internals.users.find((user) => (user.id === session.id));
+      const account = users.find((user) => (user.id === session.id));
 
       if (!account) {
         // Must return { isValid: false } for invalid cookies
@@ -87,19 +72,37 @@ internals.server = async function () {
 
   server.auth.default('session');
 
+  await server.register({
+    plugin: require('hapi-mongodb'),
+    options: {
+      url: process.env.DATABASE_URL,
+      settings: {
+        useUnifiedTopology: true
+      },
+      decorate: true
+    }
+  });
+
   server.route([
+    // 首页
     {
       method: 'GET',
       path: '/',
-      options: {
-        handler: (request, h) => {
-          return internals.renderHtml.home(request.auth.credentials.name);
-        }
+      handler: (request, h) => {
+        return renderHtml.home(request.auth.credentials.name);
       }
     },
+    // 登入登出
     {
       method: 'GET',
       path: '/login',
+      handler: async (request, h) => {
+        if (request.auth.isAuthenticated) {
+          return h.redirect('/');
+        }
+
+        return renderHtml.login();
+      },
       options: {
         auth: {
           mode: 'try'
@@ -109,51 +112,52 @@ internals.server = async function () {
             redirectTo: false
           }
         },
-        handler: async (request, h) => {
-          if (request.auth.isAuthenticated) {
-            return h.redirect('/');
-          }
-
-          return internals.renderHtml.login();
-        }
       }
     },
     {
       method: 'POST',
       path: '/login',
+      handler: async (request, h) => {
+        const { username, password } = request.payload;
+        if (!username || !password) {
+          return renderHtml.login('Missing username or password');
+        }
+
+        // Try to find user with given credentials
+
+        const account = users.find(
+          (user) => user.name === username
+        );
+
+        if (!account || !(await Bcrypt.compare(password, account.password))) {
+          return renderHtml.login('Invalid username or password');
+        }
+
+        request.cookieAuth.set({ id: account.id });
+        return h.redirect('/');
+      },
       options: {
         auth: {
           mode: 'try'
         },
-        handler: async (request, h) => {
-          const { username, password } = request.payload;
-          if (!username || !password) {
-            return internals.renderHtml.login('Missing username or password');
-          }
-
-          // Try to find user with given credentials
-
-          const account = internals.users.find(
-            (user) => user.name === username
-          );
-
-          if (!account || !(await Bcrypt.compare(password, account.password))) {
-            return internals.renderHtml.login('Invalid username or password');
-          }
-
-          request.cookieAuth.set({ id: account.id });
-          return h.redirect('/');
-        }
       }
     },
     {
       method: 'GET',
       path: '/logout',
-      options: {
-        handler: (request, h) => {
-          request.cookieAuth.clear();
-          return h.redirect('/');
-        }
+      handler: (request, h) => {
+        request.cookieAuth.clear();
+        return h.redirect('/');
+      }
+    },
+    // 获取一个todo事项
+    {
+      method: 'GET',
+      path: '/todo',
+      handler: async (request, h) => {
+        const todo = await request.mongo.db.collection('todolists').findOne({})
+  
+        return todo;
       }
     }
   ]);
@@ -163,9 +167,9 @@ internals.server = async function () {
 };
 
 
-internals.start = async function () {
+const start = async function () {
   try {
-    await internals.server();
+    await init();
   }
   catch (err) {
     console.error(err.stack);
@@ -173,4 +177,4 @@ internals.start = async function () {
   }
 };
 
-internals.start();
+start();
